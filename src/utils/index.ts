@@ -152,3 +152,21 @@ export const getCookie = (cname: string): string => {
   }
   return '';
 };
+
+// Sometime followUpPrompts is a string with multiple levels of escaping, we need to parse it to an array
+export const parseFollowUpPrompts = (str: string | string[]): string[] => {
+  try {
+    let parsed = str;
+    let nb = 0;
+    while (typeof parsed != 'object') {
+      console.log(typeof parsed);
+      nb++;
+      parsed = JSON.parse(parsed as string);
+      console.log(parsed);
+    }
+    return parsed as string[];
+  } catch (error) {
+    console.error('Failed to parse followUpPrompts:', error);
+    return [];
+  }
+};
