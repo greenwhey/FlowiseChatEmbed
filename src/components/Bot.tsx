@@ -35,7 +35,7 @@ import { CircleDotIcon, SparklesIcon, TrashIcon } from './icons';
 import { CancelButton } from './buttons/CancelButton';
 import { cancelAudioRecording, startAudioRecording, stopAudioRecording } from '@/utils/audioRecording';
 import { LeadCaptureBubble } from '@/components/bubbles/LeadCaptureBubble';
-import { removeLocalStorageChatHistory, getLocalStorageChatflow, setLocalStorageChatflow, setCookie, getCookie } from '@/utils';
+import { removeLocalStorageChatHistory, getLocalStorageChatflow, setLocalStorageChatflow, setCookie, getCookie, parseFollowUpPrompts } from '@/utils';
 import { cloneDeep } from 'lodash';
 import { FollowUpPromptBubble } from '@/components/bubbles/FollowUpPromptBubble';
 import { fetchEventSource, EventStreamContentType } from '@microsoft/fetch-event-source';
@@ -140,6 +140,8 @@ type observerConfigType = (accessor: string | boolean | object | MessageType[]) 
 export type observersConfigType = Record<'observeUserInput' | 'observeLoading' | 'observeMessages', observerConfigType>;
 
 export type BotProps = {
+  jsInput?: string;
+  clearJsInput?: () => void;
   chatflowid: string;
   apiHost?: string;
   onRequest?: (request: RequestInit) => Promise<void>;
@@ -539,6 +541,17 @@ export const Bot = (botProps: BotProps & { class?: string }) => {
   let isTTSActionRef = false;
   let ttsTimeoutRef: ReturnType<typeof setTimeout> | null = null;
 
+  document.addEventListener('flowise:ask', (event) => {
+    handleSubmit((event as CustomEvent<{ message: string }>).detail.message);
+  });
+
+  createEffect(() => {
+    if (props.jsInput && props.jsInput !== '') {
+      handleSubmit(props.jsInput);
+      props.clearJsInput?.();
+    }
+  });
+
   createMemo(() => {
     const customerId = (props.chatflowConfig?.vars as any)?.customerId;
     setChatId(customerId ? `${customerId.toString()}+${uuidv4()}` : uuidv4());
@@ -819,7 +832,7 @@ export const Bot = (botProps: BotProps & { class?: string }) => {
         addChatMessage(allMessages);
         return allMessages;
       });
-      setFollowUpPrompts(JSON.parse(data.followUpPrompts));
+      setFollowUpPrompts(parseFollowUpPrompts(data.followUpPrompts));
     }
   };
 
@@ -1518,7 +1531,7 @@ export const Bot = (botProps: BotProps & { class?: string }) => {
     if (followUpPromptsStatus() && messages().length > 0) {
       const lastMessage = messages()[messages().length - 1];
       if (lastMessage.type === 'apiMessage' && lastMessage.followUpPrompts) {
-        setFollowUpPrompts(JSON.parse(lastMessage.followUpPrompts));
+        setFollowUpPrompts(parseFollowUpPrompts(lastMessage.followUpPrompts));
       } else if (lastMessage.type === 'userMessage') {
         setFollowUpPrompts([]);
       }

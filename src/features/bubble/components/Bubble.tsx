@@ -21,6 +21,13 @@ export const Bubble = (props: BubbleProps) => {
     right: bubbleProps.theme?.button?.right ?? 20,
   });
 
+  const [jsInput, setJsInput] = createSignal('');
+
+  document.addEventListener('flowise:open', (event) => {
+    setJsInput((event as CustomEvent<{ message: string }>).detail.message);
+    openBot();
+  });
+
   const openBot = () => {
     if (!isBotStarted()) setIsBotStarted(true);
     setIsBotOpened(true);
@@ -123,6 +130,8 @@ export const Bubble = (props: BubbleProps) => {
               </button>
             </Show>
             <Bot
+              jsInput={jsInput()}
+              clearJsInput={() => setJsInput('')}
               backgroundColor={bubbleProps.theme?.chatWindow?.backgroundColor}
               formBackgroundColor={bubbleProps.theme?.form?.backgroundColor}
               formTextColor={bubbleProps.theme?.form?.textColor}
