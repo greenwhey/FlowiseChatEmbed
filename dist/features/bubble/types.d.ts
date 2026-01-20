@@ -80,6 +80,8 @@ export type ChatWindowTheme = {
     clearChatOnReload?: boolean;
     dateTimeToggle?: DateTimeToggleTheme;
     renderHTML?: boolean;
+    disableAutoScroll?: boolean;
+    reverseChat?: boolean;
 };
 export type ButtonTheme = {
     size?: 'small' | 'medium' | 'large' | number;

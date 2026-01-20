@@ -121,6 +121,8 @@ export type BotProps = {
     dateTimeToggle?: DateTimeToggleTheme;
     renderHTML?: boolean;
     closeBot?: () => void;
+    disableAutoScroll?: boolean;
+    reverseChat?: boolean;
 };
 export type LeadsConfig = {
     status: boolean;

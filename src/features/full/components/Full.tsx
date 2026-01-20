@@ -94,6 +94,8 @@ export const Full = (props: FullProps, { element }: { element: HTMLElement }) =>
             disclaimer={props.theme?.disclaimer}
             dateTimeToggle={props.theme?.chatWindow?.dateTimeToggle}
             renderHTML={props.theme?.chatWindow?.renderHTML}
+            disableAutoScroll={props.theme?.chatWindow?.disableAutoScroll}
+            reverseChat={props.theme?.chatWindow?.reverseChat}
           />
         </div>
       </Show>

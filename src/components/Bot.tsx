@@ -178,6 +178,8 @@ export type BotProps = {
   dateTimeToggle?: DateTimeToggleTheme;
   renderHTML?: boolean;
   closeBot?: () => void;
+  disableAutoScroll?: boolean;
+  reverseChat?: boolean;
 };
 
 export type LeadsConfig = {
@@ -490,6 +492,7 @@ export const Bot = (botProps: BotProps & { class?: string }) => {
   const [isLeadSaved, setIsLeadSaved] = createSignal(false);
   const [leadEmail, setLeadEmail] = createSignal('');
   const [disclaimerPopupOpen, setDisclaimerPopupOpen] = createSignal(false);
+  const [dynamicSpacerHeight, setDynamicSpacerHeight] = createSignal(0);
 
   const [openFeedbackDialog, setOpenFeedbackDialog] = createSignal(false);
   const [feedback, setFeedback] = createSignal('');
@@ -584,6 +587,8 @@ export const Bot = (botProps: BotProps & { class?: string }) => {
   });
 
   const scrollToBottom = () => {
+    // Don't auto-scroll to bottom when reverseChat is enabled
+    if (props.reverseChat) return;
     setTimeout(() => {
       chatContainer?.scrollTo(0, chatContainer.scrollHeight);
     }, 50);
@@ -1294,14 +1299,84 @@ export const Bot = (botProps: BotProps & { class?: string }) => {
     }
   });
 
-  // Auto scroll chat to bottom (but not during TTS actions)
+  // Calculate dynamic spacer height for reverseChat mode
+  // The spacer allows the last user message to be scrolled to the top
   createEffect(() => {
-    if (messages()) {
-      if (messages().length > 1 && !isTTSActionRef) {
-        setTimeout(() => {
-          chatContainer?.scrollTo(0, chatContainer.scrollHeight);
-        }, 400);
+    if (!props.reverseChat || !chatContainer) {
+      setDynamicSpacerHeight(0);
+      return;
+    }
+
+    const msgs = messages();
+    if (!msgs || msgs.length <= 1) {
+      setDynamicSpacerHeight(0);
+      return;
+    }
+
+    // Calculate after DOM updates
+    setTimeout(() => {
+      if (!chatContainer) return;
+
+      // Find the last user message
+      const messageContainers = chatContainer.querySelectorAll('.guest-container');
+      const lastUserMessage = messageContainers[messageContainers.length - 1] as HTMLElement;
+
+      if (!lastUserMessage) {
+        setDynamicSpacerHeight(0);
+        return;
       }
+
+      const containerHeight = chatContainer.clientHeight;
+
+      // Calculate height of content after the user message (the bot response)
+      // This is the distance from the top of user message to the end of content (minus spacer)
+      const userMessageTop = lastUserMessage.offsetTop;
+      const currentSpacerHeight = dynamicSpacerHeight();
+      const totalContentHeight = chatContainer.scrollHeight - currentSpacerHeight;
+      const contentAfterUserMessage = totalContentHeight - userMessageTop;
+
+      // Spacer should be: container height - content after user message
+      // This allows user message to be at the top with response below
+      const neededSpacer = Math.max(0, containerHeight - contentAfterUserMessage);
+      setDynamicSpacerHeight(neededSpacer);
+    }, 50);
+  });
+
+  // Auto scroll chat to bottom (but not during TTS actions)
+  // When reverseChat is enabled, scroll to position user message at the top
+  // Track last user message count to avoid duplicate scrolls
+  let lastUserMessageCount = 0;
+
+  createEffect(() => {
+    const msgs = messages();
+    if (!msgs || msgs.length <= 1) return;
+
+    const lastMessage = msgs[msgs.length - 1];
+
+    // reverseChat has its own scroll behavior, so it works even with disableAutoScroll
+    if (props.reverseChat) {
+      // Count user messages to detect new ones
+      const userMessageCount = msgs.filter((m) => m.type === 'userMessage').length;
+
+      // Scroll when a new user message is added
+      if (userMessageCount > lastUserMessageCount) {
+        lastUserMessageCount = userMessageCount;
+        // Use longer delay to ensure DOM is ready (especially when chat just opened via flowise:open)
+        setTimeout(() => {
+          if (!chatContainer) return;
+          // Find the last user message container and scroll it to the top
+          const messageContainers = chatContainer.querySelectorAll('.guest-container');
+          const lastUserMessageContainer = messageContainers[messageContainers.length - 1] as HTMLElement;
+          if (lastUserMessageContainer) {
+            lastUserMessageContainer.scrollIntoView({ block: 'start', behavior: 'auto' });
+          }
+        }, 300);
+      }
+      // Don't auto-scroll during bot response - let user scroll manually
+    } else if (!props.disableAutoScroll && !isTTSActionRef && lastMessage.agentFlowEventStatus !== 'INPROGRESS') {
+      setTimeout(() => {
+        chatContainer?.scrollTo(0, chatContainer.scrollHeight);
+      }, 400);
     }
   });
 
@@ -1332,28 +1407,28 @@ export const Bot = (botProps: BotProps & { class?: string }) => {
       const loadedMessages: MessageType[] =
         chatMessage?.chatHistory?.length > 0
           ? chatMessage.chatHistory?.map((message: MessageType) => {
-            const chatHistory: MessageType = {
-              messageId: message?.messageId,
-              message: message.message,
-              type: message.type,
-              rating: message.rating,
-              dateTime: message.dateTime,
-            };
-            if (message.sourceDocuments) chatHistory.sourceDocuments = message.sourceDocuments;
-            if (message.fileAnnotations) chatHistory.fileAnnotations = message.fileAnnotations;
-            if (message.fileUploads) chatHistory.fileUploads = message.fileUploads;
-            if (message.agentReasoning) chatHistory.agentReasoning = message.agentReasoning;
-            if (message.action) chatHistory.action = message.action;
-            if (message.artifacts) chatHistory.artifacts = message.artifacts;
-            if (message.followUpPrompts) chatHistory.followUpPrompts = message.followUpPrompts;
-            if (message.execution && message.execution.executionData)
-              chatHistory.agentFlowExecutedData =
-                typeof message.execution.executionData === 'string' ? JSON.parse(message.execution.executionData) : message.execution.executionData;
-            if (message.agentFlowExecutedData)
-              chatHistory.agentFlowExecutedData =
-                typeof message.agentFlowExecutedData === 'string' ? JSON.parse(message.agentFlowExecutedData) : message.agentFlowExecutedData;
-            return chatHistory;
-          })
+              const chatHistory: MessageType = {
+                messageId: message?.messageId,
+                message: message.message,
+                type: message.type,
+                rating: message.rating,
+                dateTime: message.dateTime,
+              };
+              if (message.sourceDocuments) chatHistory.sourceDocuments = message.sourceDocuments;
+              if (message.fileAnnotations) chatHistory.fileAnnotations = message.fileAnnotations;
+              if (message.fileUploads) chatHistory.fileUploads = message.fileUploads;
+              if (message.agentReasoning) chatHistory.agentReasoning = message.agentReasoning;
+              if (message.action) chatHistory.action = message.action;
+              if (message.artifacts) chatHistory.artifacts = message.artifacts;
+              if (message.followUpPrompts) chatHistory.followUpPrompts = message.followUpPrompts;
+              if (message.execution && message.execution.executionData)
+                chatHistory.agentFlowExecutedData =
+                  typeof message.execution.executionData === 'string' ? JSON.parse(message.execution.executionData) : message.execution.executionData;
+              if (message.agentFlowExecutedData)
+                chatHistory.agentFlowExecutedData =
+                  typeof message.agentFlowExecutedData === 'string' ? JSON.parse(message.agentFlowExecutedData) : message.agentFlowExecutedData;
+              return chatHistory;
+            })
           : [{ message: props.welcomeMessage ?? defaultWelcomeMessage, type: 'apiMessage' }];
 
       const filteredMessages = loadedMessages.filter((message) => message.type !== 'leadCaptureMessage');
@@ -2515,6 +2590,10 @@ export const Bot = (botProps: BotProps & { class?: string }) => {
                   );
                 }}
               </For>
+              {/* Dynamic spacer for reverseChat - shrinks as content grows */}
+              <Show when={props.reverseChat && dynamicSpacerHeight() > 0}>
+                <div style={{ 'min-height': `${dynamicSpacerHeight()}px`, 'flex-shrink': 0 }} />
+              </Show>
             </div>
             <Show when={messages().length === 1}>
               <Show when={starterPrompts().length > 0}>
@@ -2536,7 +2615,9 @@ export const Bot = (botProps: BotProps & { class?: string }) => {
                 <>
                   <div class="flex items-center gap-1 px-5">
                     <SparklesIcon class="w-4 h-4" color={props.followUpPrompts?.iconColor || '#3B81F6'} />
-                    <span class="text-sm text-gray-700" style={{ color: props.followUpPrompts?.textColor || defaultTextColor }}>{props.followUpPrompts?.text || 'Try these prompts'}</span>
+                    <span class="text-sm text-gray-700" style={{ color: props.followUpPrompts?.textColor || defaultTextColor }}>
+                      {props.followUpPrompts?.text || 'Try these prompts'}
+                    </span>
                   </div>
                   <div class="w-full flex flex-row flex-wrap px-5 py-[10px] gap-2">
                     <For each={[...followUpPrompts()]}>
